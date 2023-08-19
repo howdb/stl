@@ -1,5 +1,5 @@
 #ifndef MYTINYSTL_RB_TREE_H_
-#define MYTINYSYL_RB_TREE_H_
+#define MYTINYSTL_RB_TREE_H_
 
 // 这个头文件包含一个模板类 rb_tree
 // rb_tree : 红黑树
@@ -20,8 +20,8 @@ namespace mystl
 
 typedef bool rb_tree_color_type;
 
-static rb_tree_color_type rb_tree_red = false;
-static rb_tree_color_type rb_tree_black = true;
+static constexpr rb_tree_color_type rb_tree_red   = false;
+static constexpr rb_tree_color_type rb_tree_black = true;
 
 // forward declaration
 
@@ -87,20 +87,20 @@ struct rb_tree_value_traits
     template <typename Ty>
     static const key_type& get_key(const Ty& value)
     {
-        return value_traits_type::get_key<Ty>(value);
+        return value_traits_type::get_key(value);
     }
 
     template <class Ty>
     static const value_type& get_value(const Ty& value)
     {
-        return value_traits_type::get_value<Ty>(value);
+        return value_traits_type::get_value(value);
     }
 };
 
 // rb tree node traits
 
 template <typename T>
-struct rb_tree_node_triats
+struct rb_tree_node_traits
 {
     typedef rb_tree_color_type                 color_type;
 
@@ -139,7 +139,7 @@ struct rb_tree_node_base
 
     node_ptr& get_node_ref()
     {
-        return reinterpret_cast<node_ptr&>(&*this);
+        return reinterpret_cast<node_ptr&>(*this);
     }
 };
 
@@ -470,7 +470,7 @@ template <typename NodePtr>
 void rb_tree_insert_rebalance(NodePtr x, NodePtr& root) noexcept
 {
     rb_tree_set_red(x);
-    while(x != root && rb_tree_is_red(x))
+    while(x != root && rb_tree_is_red(x->parent))
     {
         if(rb_tree_is_lchild(x->parent))
         {
@@ -490,7 +490,7 @@ void rb_tree_insert_rebalance(NodePtr x, NodePtr& root) noexcept
                     rb_tree_rotate_left(x, root);
                 }
                 rb_tree_set_black(x->parent);
-                rb_tree_set_red(x->aprent->parent);
+                rb_tree_set_red(x->parent->parent);
                 rb_tree_rotate_right(x->parent->parent, root);
                 break;
             }
@@ -512,13 +512,10 @@ void rb_tree_insert_rebalance(NodePtr x, NodePtr& root) noexcept
                     x = x->parent;
                     rb_tree_rotate_right(x, root);
                 }
-                else
-                {
-                    rb_tree_set_black(x->parent);
-                    rb_tree_set_red(x->parent->parent);
-                    rb_tree_rotate_left(x->parent->parent, root);
-                    break;
-                }
+                rb_tree_set_black(x->parent);
+                rb_tree_set_red(x->parent->parent);
+                rb_tree_rotate_left(x->parent->parent, root);
+                break;
             }
         }
     }
@@ -529,7 +526,9 @@ void rb_tree_insert_rebalance(NodePtr x, NodePtr& root) noexcept
 template <typename NodePtr>
 NodePtr rb_tree_erase_rebalance(NodePtr z, NodePtr& root, NodePtr& leftmost, NodePtr& rightmost)
 {
-    // y 是可能的替换节点，指向最终要删除的节点
+    // 如果 y 有两个孩子, y 是要替换的节点；只有一个孩子的话, y 指向最终要删除的节点
+    // x 是要替换 y 的节点
+    // 还要判断 y 是 z 的儿子，还是右子树的最左边节点
     auto y = (z->left == nullptr || z->right == nullptr) ? z : rb_tree_next(z);
     // x 是 y 的一个独子节点或 NIL 节点
     auto x = y->left != nullptr ? y->left : y->right;
@@ -570,15 +569,19 @@ NodePtr rb_tree_erase_rebalance(NodePtr z, NodePtr& root, NodePtr& leftmost, Nod
         xp = y->parent;
         if(x)x->parent = xp;
         if(root == z)root = x;
-        else if(rb_tree_is_lchild(x))xp->left = x;
-        else xp->right = x;
+        else if(rb_tree_is_lchild(z))z->parent->left = x;
+        else z->parent->right = x;
 
         // 此时 z 有可能是最左节点或最右节点，更新数据
-        if(leftmost == z)leftmost = x == nullptr ? xp ? rb_tree_min(x);
+        if(leftmost == z)leftmost = x == nullptr ? xp : rb_tree_min(x);
         if(rightmost == z)rightmost = x == nullptr ? xp : rb_tree_max(x);
     }
 
     // 此时，y 指向要删除的节点，x 为替代节点，从 x 节点开始调整。
+    // 情况1：兄弟节点为红色，父节点为黑色。兄弟节点旋转，变成兄弟节点为黑色的情况
+    // 情况2：兄弟节点为黑色，兄弟节点的左右两个节点也都为黑色。x 节点和兄弟节点都减一重黑色，父节点增加一重，成为新的 x 节点
+    // 情况3：兄弟节点为黑色，兄弟节点的左右节点分别为红黑，兄弟节点旋转，转化为情况四
+    // 情况4：兄弟节点为黑色，兄弟节点的右子节点为红色，兄弟节点旋转，重新平衡
     if(!rb_tree_is_red(y))
     {
         while(x != root && (x == nullptr || !rb_tree_is_red(x)))
@@ -690,12 +693,12 @@ public:
     typedef typename allocator_type::difference_type difference_type;
 
     typedef rb_tree_iterator<T>                      iterator;
-    typedef rb_tree_const_iterator                   const_iterator;
+    typedef rb_tree_const_iterator<T>                const_iterator;
     typedef mystl::reverse_iterator<iterator>        reverse_iterator;
     typedef mystl::reverse_iterator<const_iterator>  const_reverse_iterator;
 
     allocator_type get_allocator() const { return node_allocator(); }
-    key_compare    get_comp()      const { return key_comp_; }
+    key_compare    key_comp()      const { return key_comp_; }
 
 private:
     // 用以下三个数据表现 rb tree
@@ -710,6 +713,7 @@ private:
     base_ptr& rightmost() const { return header_->right; }
 
 public:
+    // 构造、复制、析构函数
     rb_tree() { rb_tree_init(); }
 
     rb_tree(const rb_tree& rhs);
@@ -743,11 +747,11 @@ public:
     const_iterator cbegin() const noexcept
     { return begin(); }
     const_iterator cend() const noexcept
-    { return ebd(); }
+    { return end(); }
     const_reverse_iterator crbegin() const noexcept
     { return rbegin(); }
     const_reverse_iterator crend() const noexcept
-    { return rebd(); }
+    { return rend(); }
 
     // 容量相关操作
     bool empty()         const noexcept { return node_count_ == 0; }
@@ -986,7 +990,8 @@ rb_tree<T, Compare>::emplace_unique(Args&&... args)
     THROW_LENGTH_ERROR_IF(node_count_ > max_size() - 1, "rb_tree<T, Comp>'s size too big");
     node_ptr np = create_node(mystl::forward<Args>(args)...);
     auto res = get_insert_unique_pos(value_traits::get_key(np->value));
-    if(res.second){
+    if(res.second)
+    {
         return mystl::make_pair(insert_node_at(res.first.first, np, res.first.second), true);
     }
     return mystl::make_pair(iterator(res.first.first), false);
@@ -1042,14 +1047,14 @@ rb_tree<T, Compare>::emplace_unique_use_hint(iterator hint, Args&&... args)
     node_ptr np = create_node(mystl::forward<Args>(args)...);
     if(node_count_ == 0)
     {
-        insert_node_at(header_, np, true);
+        return insert_node_at(header_, np, true);
     }
     key_type key = value_traits::get_key(np->value);
     if(hint == begin())
     {   // 位于 begin 处
         if(key_comp_(key, value_traits::get_key(*hint)))
         {
-            insert_node_at(hint.node, np, true);
+            return insert_node_at(hint.node, np, true);
         }
         else
         {
@@ -1101,7 +1106,7 @@ rb_tree<T, Compare>::insert_unique(const value_type& value)
     auto res = get_insert_unique_pos(value_traits::get_key(value));
     if(res.second)
     {
-        return mystl::make_pair((res.first.first, value, res.first.second), true);
+        return mystl::make_pair(insert_value_at(res.first.first, value, res.first.second), true);
     }
     return mystl::make_pair(res.first.first, false);
 }
@@ -1221,8 +1226,6 @@ rb_tree<T, Compare>::find(const key_type& key) const
     return (j == end() || key_comp_(key, value_traits::get_key(*j))) ? end() : j;
 }
 
-
-
 // 键值不小于 key 的第一个位置
 template <typename T, typename Compare>
 typename rb_tree<T, Compare>::iterator
@@ -1266,7 +1269,7 @@ rb_tree<T, Compare>::lower_bound(const key_type& key) const
     return const_iterator(y);
 }
 
-// 键值不小于 key 的最后一个位置
+// 键值大于 key 的第一个位置
 template <typename T, typename Compare>
 typename rb_tree<T, Compare>::iterator
 rb_tree<T, Compare>::upper_bound(const key_type& key)
@@ -1362,7 +1365,7 @@ rb_tree<T, Compare>::clone_node(base_ptr x)
 template <typename T, typename Compare>
 void rb_tree<T, Compare>::destroy_node(node_ptr p)
 {
-    data_allocator::destroy(&p->vlaue);
+    data_allocator::destroy(&p->value);
     node_allocator::deallocate(p);
 }
 
@@ -1471,7 +1474,7 @@ rb_tree<T, Compare>::insert_value_at(base_ptr x, const value_type& value, bool a
 // 在 x 节点处插入新的节点
 // x 为插入点的父节点， node 为要插入的节点，add_to_left 表示是否在左边插入
 template <typename T, typename Compare>
-rb_tree<T, Compare>::iterator
+typename rb_tree<T, Compare>::iterator
 rb_tree<T, Compare>::insert_node_at(base_ptr x, node_ptr node, bool add_to_left)
 {
     node->parent = x;
@@ -1499,7 +1502,7 @@ rb_tree<T, Compare>::insert_node_at(base_ptr x, node_ptr node, bool add_to_left)
 
 // 插入元素，键值允许重复，使用 hint
 template <typename T, typename Compare>
-rb_tree<T, Compare>::iterator
+typename rb_tree<T, Compare>::iterator
 rb_tree<T, Compare>::insert_multi_use_hint(iterator hint, key_type key, node_ptr node)
 {
     // 在 hint 附近寻找可插入的位置
@@ -1525,7 +1528,7 @@ rb_tree<T, Compare>::insert_multi_use_hint(iterator hint, key_type key, node_ptr
 
 // 插入元素，键值不允许重复，使用 hint
 template <typename T, typename Compare>
-rb_tree<T, Compare>::iterator
+typename rb_tree<T, Compare>::iterator
 rb_tree<T, Compare>::insert_unique_use_hint(iterator hint, key_type key, node_ptr node)
 {
     auto np = hint.node;
@@ -1556,7 +1559,7 @@ rb_tree<T, Compare>::insert_unique_use_hint(iterator hint, key_type key, node_pt
 // copy_from 函数
 // 递归复制一颗树，节点从 x 开始，p 为 x 的父节点
 template <typename T, typename Compare>
-rb_tree<T, Compare>::base_ptr
+typename rb_tree<T, Compare>::base_ptr
 rb_tree<T, Compare>::copy_from(base_ptr x, base_ptr p)
 {
     auto top = clone_node(x);
@@ -1604,12 +1607,50 @@ void rb_tree<T, Compare>::erase_since(base_ptr x)
     }
 }
 
+// 重载比较操作符
+template <class T, class Compare>
+bool operator==(const rb_tree<T, Compare>& lhs, const rb_tree<T, Compare>& rhs)
+{
+  return lhs.size() == rhs.size() && mystl::equal(lhs.begin(), lhs.end(), rhs.begin());
+}
 
-template <typename T, typename Compare>
-rb_tree<T, Compare>::
+template <class T, class Compare>
+bool operator<(const rb_tree<T, Compare>& lhs, const rb_tree<T, Compare>& rhs)
+{
+  return mystl::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
+}
 
-template <typename T, typename Compare>
-rb_tree<T, Compare>::
+template <class T, class Compare>
+bool operator!=(const rb_tree<T, Compare>& lhs, const rb_tree<T, Compare>& rhs)
+{
+  return !(lhs == rhs);
+}
+
+template <class T, class Compare>
+bool operator>(const rb_tree<T, Compare>& lhs, const rb_tree<T, Compare>& rhs)
+{
+  return rhs < lhs;
+}
+
+template <class T, class Compare>
+bool operator<=(const rb_tree<T, Compare>& lhs, const rb_tree<T, Compare>& rhs)
+{
+  return !(rhs < lhs);
+}
+
+template <class T, class Compare>
+bool operator>=(const rb_tree<T, Compare>& lhs, const rb_tree<T, Compare>& rhs)
+{
+  return !(lhs < rhs);
+}
+
+// 重载 mystl 的 swap
+template <class T, class Compare>
+void swap(rb_tree<T, Compare>& lhs, rb_tree<T, Compare>& rhs) noexcept
+{
+  lhs.swap(rhs);
+}
+
 }
 
 #endif

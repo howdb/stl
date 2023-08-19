@@ -86,8 +86,7 @@ int main()
     // map<string, vector<int>> mp;
     // mp.insert({"36", {1, 2}});
     // cout << mp["36"][1];
-    int a=5;    
-    vector<int> v{1,2,3};while(--a)v.push_back(1);cout << v.capacity();
+    // vector<int> v{1,2,3};while(--a)v.push_back(1);cout << v.capacity();
     // cout << v.data() << ' ' << *v.data();
     // v.reserve(100);
     // cout << &*v.begin() << endl;
@@ -106,4 +105,15 @@ int main()
     // // cout << &c << endl << &d << endl;
     // auto a = bv[0];
     // cout << typeid(a).name();assert(nullptr == 0);
+    double x;
+    double& p = x;
+    deque<int> dq;vector<int> v;
+    auto q = dq;
+    for(int i=0;i<10000;++i){
+        dq.push_back(i);
+        cout << &dq[0] << endl;
+        v.push_back(i);
+    }
+    // dq.clear();v.clear();
+    // cout << dq.size() << endl;
 }

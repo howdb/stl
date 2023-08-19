@@ -326,7 +326,7 @@ public:
     reference operator[](size_type n)
     {
         MYSTL_DEBUG(n < size());
-        return begin_[n];  // 这里返回的不是一个iterator吗？
+        return begin_[n];  
     }
     const_reference operator[](size_type n) const
     {
